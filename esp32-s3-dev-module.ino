@@ -11,6 +11,9 @@ const char* serverName = "https://esp32-frontend.vercel.app/api/data";
 
 DHT dht(DHTPIN, DHTTYPE);
 
+unsigned long previousMillis = 0;  
+const long interval = 1800000;     
+
 void setup() {
   Serial.begin(115200);
   dht.begin();
@@ -24,36 +27,40 @@ void setup() {
 }
 
 void loop() {
+  unsigned long currentMillis = millis();
+  
   if (WiFi.status() == WL_CONNECTED) {
-    float temperature = dht.readTemperature();
-    float humidity = dht.readHumidity();
+    if (currentMillis - previousMillis >= interval) {
+      previousMillis = currentMillis;
 
-    if (isnan(temperature) || isnan(humidity)) {
-      Serial.println("Failed to read from DHT sensor!");
-      return;
+      float temperature = dht.readTemperature();
+      float humidity = dht.readHumidity();
+
+      if (isnan(temperature) || isnan(humidity)) {
+        Serial.println("Failed to read from DHT sensor!");
+        return;
+      }
+
+      HTTPClient http;
+      http.begin(serverName);
+      http.addHeader("Content-Type", "application/json");
+
+      String payload = "{\"temperature\": " + String(temperature) + ", \"humidity\": " + String(humidity) + "}";
+      
+      int httpResponseCode = http.POST(payload);
+
+      if (httpResponseCode > 0) {
+        String response = http.getString();
+        Serial.println("Response Code: " + String(httpResponseCode));
+        Serial.println("Response: " + response);
+      } else {
+        Serial.println("Error on sending POST request");
+        Serial.println("Response Code: " + String(httpResponseCode));
+      }
+
+      http.end();
     }
-
-    HTTPClient http;
-    http.begin(serverName);
-    http.addHeader("Content-Type", "application/json");
-
-    String payload = "{\"temperature\": " + String(temperature) + ", \"humidity\": " + String(humidity) + "}";
-    
-    int httpResponseCode = http.POST(payload);
-
-    if (httpResponseCode > 0) {
-      String response = http.getString();
-      Serial.println("Response Code: " + String(httpResponseCode));
-      Serial.println("Response: " + response);
-    } else {
-      Serial.println("Error on sending POST request");
-      Serial.println("Response Code: " + String(httpResponseCode));
-    }
-
-    http.end();
   } else {
     Serial.println("Error in WiFi connection");
   }
-
-  delay(600000); 
 }
